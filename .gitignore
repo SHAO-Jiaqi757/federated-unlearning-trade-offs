@@ -1,0 +1,6 @@
+results
+models
+data
+checkpoints
+__pycache__
+*.log

@@ -1,0 +1,1 @@
+python ./main.py -c config.yml > run.log
