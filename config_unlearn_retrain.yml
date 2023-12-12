@@ -16,8 +16,12 @@ clients:
 
 server:
     address: 127.0.0.1
-    port: 8020
-
+    port: 8080
+    
+    unlearn: true # unlearn removed clients
+    retrain: true # unlearning with retraining
+    removed_clients: [1, 2] # the clients that are unlearned
+    
 
 data:
     # The training and testing dataset
@@ -51,6 +55,8 @@ trainer:
     epochs: 5
     batch_size: 64
     optimizer: SGD
+
+    checkpoint_dir: "unlearn_checkpoints" # save the model after each round
 
 algorithm:
     # Aggregation algorithm

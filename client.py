@@ -1,4 +1,5 @@
 from collections import Counter
+import logging
 import os
 import pickle
 from plato.clients import simple
@@ -22,9 +23,9 @@ class Client(simple.Client):
             self.testset = self.datasource.get_test_set()
 
         
-        self.classes = self.datasource.classes()
+        self.targets = self.datasource.targets()
         self.num_train_examples = self.datasource.num_train_examples()
-        counter = Counter(self.classes)
+        counter = Counter(self.targets)
         
         # save client_id, num_samples, and class distribution
         
@@ -32,11 +33,13 @@ class Client(simple.Client):
             else "checkpoints"
         os.makedirs(checkpoint_dir, exist_ok=True)
         checkpoint_file = os.path.join(checkpoint_dir, f'client_info_{self.client_id}.pkl')
+        
+        logging.info(f"Saving client info to {checkpoint_file}")
         with open(checkpoint_file, 'wb') as f:
             pickle.dump({
                 'client_id': self.client_id,
-                'num_samples': self.num_train_examples,
-                'class_distribution': counter
+                'sampler_condition': self.sampler.get_sampler_condition(),
+                'num_samples': self.sampler.num_samples(),
             }, f)
             
     

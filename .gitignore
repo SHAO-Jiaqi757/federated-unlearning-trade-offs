@@ -1,6 +1,6 @@
 results
 models
 data
-checkpoints
+*checkpoints
 __pycache__
 *.log
