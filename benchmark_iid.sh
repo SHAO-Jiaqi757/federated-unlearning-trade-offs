@@ -15,4 +15,4 @@ source ~/miniconda3/etc/profile.d/conda.sh
 conda activate openmmlab
 
 # Run the Python script with arguments
-~/miniconda3/envs/openmmlab/bin/python ./main.py -c config.yml
+~/miniconda3/envs/openmmlab/bin/python ./main.py -c config_iid.yml

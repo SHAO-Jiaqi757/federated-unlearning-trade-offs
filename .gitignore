@@ -1,6 +1,10 @@
-results
+*results*
 models
 data
-*checkpoints
+*test*
+*checkpoints*
 __pycache__
 *.log
+scratch
+logs
+configs
