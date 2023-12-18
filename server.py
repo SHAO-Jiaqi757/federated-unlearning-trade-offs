@@ -2,12 +2,8 @@ import asyncio
 import os
 import pickle
 from plato.servers import fedavg
-from plato.servers.base import ServerEvents
 from plato.config import Config
 import logging
-import socketio
-from aiohttp import web
-from plato.utils import s3, fonts
 
 
 class Server(fedavg.Server):
@@ -17,7 +13,10 @@ class Server(fedavg.Server):
         if hasattr(Config().server, "unlearn"):
             self.unlearn = Config().server.unlearn
             self.removed_clients = Config().server.removed_clients # list of client_ids to remove
-            
+            if hasattr(Config().server, "retrain"):
+                self.retrain = Config().server.retrain
+            else:
+                self.retrain = False
         else:
             self.unlearn = False
 
@@ -31,7 +30,7 @@ class Server(fedavg.Server):
             client_ids.append(update.report.client_id)
             num_samples.append(update.report.num_samples)
         
-        if self.current_round >= Config().trainer.rounds - 10: 
+        if self.current_round >= Config().trainer.rounds - 5: 
             checkpoints = {
                 'client_ids': client_ids,
                 'num_samples': num_samples,
@@ -47,7 +46,7 @@ class Server(fedavg.Server):
             checkpoint_file = os.path.join(checkpoint_dir, f'checkpoints_{self.current_round}.pkl')
             with open(checkpoint_file, 'wb') as f:
                 pickle.dump(checkpoints, f)
-            
+         
         return weights_received
     
     
@@ -58,12 +57,12 @@ class Server(fedavg.Server):
         # Extract the total number of samples
         logging.info(f"self.unlearn: {self.unlearn}")
         if self.unlearn:
-            if hasattr(Config().server, "retrain"):
-                self.retrain = Config().server.retrain
-                if self.retrain:
-                    logging.info("retrain..")
-                    self.retrain_setup(updates)
-                    
+            self.unlearn_setup(updates)
+            if not self.retrain and Config().server.unlearn_strategy == "tradeoff_stability":
+                checkpoint_dir = Config().params['checkpoint_path']
+                pretrained_gradients = []
+        else: pretrained_gradients = None
+
         self.total_samples = sum(update.report.num_samples for update in updates)
 
         # Perform weighted averaging
@@ -75,7 +74,19 @@ class Server(fedavg.Server):
         for i, update in enumerate(deltas_received):
             report = updates[i].report
             num_samples = report.num_samples
-
+            client_id = report.client_id
+            
+            # save the gradient from the last round of original training (resume round)
+            if pretrained_gradients is not None:
+                with open(os.path.join(checkpoint_dir, f"pretrained_{client_id}.pkl"), "rb") as f:
+                    pretrained = pickle.load(f)
+                    if len(pretrained_gradients) == 0:
+                        pretrained_gradients = [(num_samples / self.total_samples) * tensor.cpu().numpy() for tensor in pretrained["gradients"]]
+                    else:
+                        for i, tensor in enumerate(pretrained["gradients"]):
+                            pretrained_gradients[i]+= (num_samples / self.total_samples) * tensor.cpu().numpy()
+                    
+                    
             for name, delta in update.items():
                 # Use weighted average by the number of samples
                 avg_update[name] += delta * (num_samples / self.total_samples)
@@ -83,60 +94,48 @@ class Server(fedavg.Server):
             # Yield to other tasks in the server
             await asyncio.sleep(0)
 
+        if pretrained_gradients is not None:
+            saved_data = {"gradients": pretrained_gradients}
+            with open(os.path.join(checkpoint_dir, "pretrained.pkl"), "wb") as f:
+                pickle.dump(saved_data, f)
+        
         return avg_update
     
-    def retrain_setup(self, updates):
-        for update in updates:
-            client_id = update.report.client_id
-            if client_id in self.removed_clients:
-                logging.info(f"removed client {client_id}")
-                update.report.num_samples = 0
-            
-            
-            
-    def start(self, port=Config().server.port):
-        """Starts running the socket.io server."""
-        logging.info(
-            "Starting a server at address %s and port %s.",
-            Config().server.address,
-            port,
-        )
-
-        self.sio = socketio.AsyncServer(
-            ping_interval=self.ping_interval,
-            max_http_buffer_size=2**31,
-            ping_timeout=self.ping_timeout,
-        )
-        self.sio.register_namespace(MyServerEvents(namespace="/", plato_server=self))
-
-        if hasattr(Config().server, "s3_endpoint_url"):
-            self.s3_client = s3.S3()
-
-        app = web.Application()
-        self.sio.attach(app)
-        web.run_app(
-            app, host=Config().server.address, port=port, loop=asyncio.get_event_loop()
-        )
+    def unlearn_setup(self, updates):
+        """Assign 0 weights to removed clients."""
+        if Config().server.retrain or \
+            (not Config().server.retrain and self.current_round > 0):
+            for update in updates:
+                client_id = update.report.client_id
+                if client_id in self.removed_clients:
+                    logging.info(f"removed client {client_id}")
+                    update.report.num_samples = 0
         
         
-class MyServerEvents(ServerEvents):
-    
     def _resume_from_checkpoint(self):
         """Resumes a training session from a previously saved checkpoint."""
         logging.info(
             "[%s] Resume a training session from a previously saved checkpoint.", self
         )
-
-        checkpoint_path = Config.params["checkpoint_path"]
+        if hasattr(Config().server, "resume_checkpoint_path"):
+            checkpoint_path = Config().server.resume_checkpoint_path
+        
+        
+        else: 
+            checkpoint_path = Config.params["checkpoint_path"]
         # Loading important data in the server for resuming its session
         if hasattr(Config().server, "resume_round"):
+            logging.info("Resuming from round %d", Config().server.resume_round)
             resume_round = Config().server.resume_round    
         
         else:
             with open(f"{checkpoint_path}/current_round.pkl", "rb") as checkpoint_file:
-                self.current_round = pickle.load(checkpoint_file)
-                resume_round = self.current_round
-
+                resume_round = pickle.load(checkpoint_file)
+        
+            
+        self.current_round = resume_round
+        if os.path.exists(os.path.join(Config().params['checkpoint_path'], "pretrained.pkl")):
+            self.current_round += 1
         self._restore_random_states(self.current_round, checkpoint_path)
         self.resumed_session = True
 
@@ -145,9 +144,7 @@ class MyServerEvents(ServerEvents):
             if hasattr(Config().trainer, "model_name")
             else "custom"
         )
-        filename = f"checkpoint_{model_name}_{resume_round}.pth"
+        filename = f"checkpoint_{model_name}_{self.current_round}.pth"
         
-        if hasattr(Config().server, "resume_checkpoint_path"):
-            checkpoint_path = Config().server.resume_checkpoint_path
-        
-        self.trainer.load_model(filename, checkpoint_path)
+
+        self.trainer.load_model(filename, location=checkpoint_path)

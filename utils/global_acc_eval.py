@@ -16,7 +16,8 @@ from plato.datasources import registry as datasources_registry
 from cifar10 import DataSource
 from plato.config import Config
 
-round = 17
+round = 30
+unlearn_round = 40
 model_name = Config().trainer.model_name
 base_path = Config().general.base_path 
 checkpoint_unlearn_path = Config().server.checkpoint_path
@@ -124,7 +125,7 @@ def main():
     model.load_state_dict(load_model_weights(original_model_path))
     class_acc, test_acc = test(model, test_loader)
     # unlearn model
-    unlearn_model_path = os.path.join(checkpoints_unlearn_retrain_dir, f'checkpoint_{model_name}_{round}.pth')
+    unlearn_model_path = os.path.join(checkpoints_unlearn_retrain_dir, f'checkpoint_{model_name}_{unlearn_round}.pth')
     
     unlearn_model = models_registry.get(model_type="torch_hub", model_name=model_name)
     unlearn_model.load_state_dict(load_model_weights(unlearn_model_path))
@@ -148,6 +149,7 @@ def main():
     plt.xlabel("client id")
     plt.ylabel("Delta Test Acc (Unlearn - Original)")
     plt.title("Client-wise Delta Test Acc")
+    print("saving to ", f"{save_results_dir}/client_wise_delta_test_acc_{model_name}_{round}.png")
     plt.savefig(f"{save_results_dir}/client_wise_delta_test_acc_{model_name}_{round}.png")
      
 
