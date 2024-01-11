@@ -4,7 +4,7 @@ import os
 import pickle
 import numpy as np
 from plato.clients import simple
-
+from plato.callbacks.client import ClientCallback
 from plato.config import Config
 
 
@@ -64,5 +64,33 @@ class Client(simple.Client):
                     'num_samples': self.sampler.num_samples(),
                 }, f)
             
+
+    def process_server_response(self, server_response) -> None:
+        if hasattr(Config().server, "unlearn_strategy") and Config().server.unlearn_strategy == "tradeoff_fairness":
+            self.trainer.lambda_l = server_response["lambdas"][self.client_id-1]
+
+
+
+class FUClientCallback(ClientCallback):
+
+    def on_outbound_ready(self, client, report, outbound_processor):
+        """
+        Event called before outbound processors start to process data.
+        """
+        ...
+        # if hasattr(Config().server, "unlearn_strategy") \
+        #             and Config().server.unlearn_strategy == "tradeoff_fairness":    
     
+        #     client_id = client.client_id
+            
+        #     loss = client.trainer._loss_tracker._average/(1+client.trainer.lambda_l)
+            
+        #     pretrained_loss = Config().trainer.pretrained_local_loss[client_id-1]
+            
+        #     delta_loss = loss - pretrained_loss        
+            
+        #     report.lambda_l = delta_loss  
+        #     logging.info(f"debugging: (in client) report.lambda_l: {report.lambda_l}")
+
+ 
     

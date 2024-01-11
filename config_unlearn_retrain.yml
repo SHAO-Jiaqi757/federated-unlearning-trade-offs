@@ -23,6 +23,7 @@ server:
     unlearn: true # unlearn removed clients
     retrain: true # unlearning with retraining
     removed_clients: [1, 4, 6] # the clients that are unlearned
+    resume_round: 0
     checkpoint_path: checkpoints_unlearn_retrain_146 # load the model from this path   
 
 data:
