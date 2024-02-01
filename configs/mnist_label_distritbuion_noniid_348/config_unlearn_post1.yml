@@ -1,0 +1,74 @@
+general:
+    base_path: /home/jshaoaj/project/unlearning/benchmark_FU/scratch/mnist_checkpoints
+clients:
+    # Type
+    type: simple
+
+    # The total number of clients
+    total_clients: 10 
+
+    # The number of clients selected in each round
+    per_round: 10
+
+    # Should the clients compute test accuracy locally?
+    do_test: true
+
+
+server:
+    address: 127.0.0.1
+    port: 8021
+    
+    unlearn: true
+    retrain: false
+    removed_clients: [3, 4, 8]
+    unlearn_strategy: tradeoff_stability
+    checkpoint_path: checkpoints_unlearn_stability_348_1
+    
+    resume_checkpoint_path: /home/jshaoaj/project/unlearning/benchmark_FU/scratch/mnist_checkpoints/checkpoints
+    resume_round: 9 # resume from the 10th round
+
+data:
+    # The training and testing dataset
+    datasource: MNIST
+    random_seed: 1234
+    # Number of samples in each partition
+    partition_size: 1000
+
+    # IID or non-IID?
+    sampler: mixed_label_quantity_noniid 
+    per_client_classes_size: 4 # each client has 6 classes
+    anchor_classes: [0, 4, 6, 9] # the anchor classes
+    consistent_clients_size: 2
+    keep_anchor_classes_size: 2
+     
+trainer:
+    # The type of the trainer
+    type: basic
+
+    # The maximum number of training rounds
+    rounds: 40
+
+    # The maximum number of clients running concurrently
+    max_concurrency: 10
+
+    # The target accuracy
+    target_accuracy: 0.98
+
+    # The machine learning model
+    model_name: lenet5
+
+    # Number of epoches for local training in each communication round
+    epochs: 10
+    batch_size: 64
+    optimizer: SGD
+
+algorithm:
+    # Aggregation algorithm
+    type: fedavg
+
+parameters:
+    optimizer:
+        lr: 0.01
+        weight_decay: 0.0001
+        momentum: 0.9
+    lambda_: 1
