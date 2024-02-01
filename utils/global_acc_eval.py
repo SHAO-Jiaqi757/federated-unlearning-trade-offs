@@ -17,11 +17,12 @@ from plato.datasources import registry as datasources_registry
 from datasource_ import *
 from plato.config import Config
 from plato.trainers import loss_criterion
-round = 10
+round = 30
 unlearn_round = Config().trainer.rounds
 model_name = Config().trainer.model_name
 print("mdoel_name", model_name)
 base_path = Config().general.base_path 
+client_number = Config().clients.total_clients 
 checkpoint_unlearn_path = Config().server.checkpoint_path
 org_checkpoint_dir = checkpoint_unlearn_path.split("_unlearn")[0]
 checkpoint_dir = os.path.join(base_path, org_checkpoint_dir)
@@ -94,7 +95,7 @@ def plot_class_acc(class_acc, test_acc):
     plt.title("class-wise accuracy (Tot Test Acc = %.2f %%)" % (100 * test_acc))
     plt.savefig(f"{save_results_dir}/class_acc_{model_name}_{round}.png")
 
-avg_loss_clients = np.zeros(10)
+avg_loss_clients = np.zeros(client_number)
 def client_test_acc(client_id, org_model, unlearn_model):
     datasource = datasources_registry.get(client_id = client_id)
     testset = datasource.get_test_set()
@@ -152,14 +153,14 @@ def main():
     
     plot_class_acc_compare(class_acc, unlearn_class_acc, test_acc, unlearn_test_acc)
 
-    client_test_accs = np.zeros(10)
-    client_test_accs_unlearn = np.zeros(10)
+    client_test_accs = np.zeros(client_number)
+    client_test_accs_unlearn = np.zeros(client_number)
     
     # unlearn testing
     total_unlearn_test_samples = 0
     correctness_remaining = 0
     
-    for client_id in range(1, 11):
+    for client_id in range(1, client_number+1):
         _, _, l_test_acc, l_unlearn_test_acc, sample_size = compare_client_test_acc(client_id, model, unlearn_model) 
         client_test_accs[client_id-1] = l_test_acc
         client_test_accs_unlearn[client_id-1] = l_unlearn_test_acc
@@ -175,10 +176,10 @@ def main():
     print("client_test_accs: ", client_test_accs)
     # plot client_test_accs_unlearn - client_test_accs
     plt.figure(figsize=(10, 5))
-    plt.bar(np.arange(1, 11), client_test_accs_unlearn - client_test_accs)
+    plt.bar(np.arange(1, client_number+1), client_test_accs_unlearn - client_test_accs)
     print("client_test_accs_unlearn - client_test_accs: ",
         client_test_accs_unlearn - client_test_accs)
-    plt.xticks(np.arange(1, 11))
+    plt.xticks(np.arange(1, client_number+1))
     plt.xlabel("client id")
     plt.ylabel("Delta Test Acc (Unlearn - Original)")
     plt.title("Client-wise Delta Test Acc")
